@@ -5,7 +5,8 @@
     "config_flow": true,
     "documentation": "https://github.com/shaonianzhentan/xiaomi_tv",
     "requirements": [
-        "adb-shell[async]>=0.4.0"
+        "adb-shell[async]>=0.4.0",
+        "pykodi>=0.2.7"
     ],
     "codeowners": [
         "@shaonianzhentan"

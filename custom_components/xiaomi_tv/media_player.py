@@ -37,6 +37,7 @@ from .utils import keyevent, startapp, check_port, getsysteminfo, changesource, 
 from .browse_media import async_browse_media
 from .dlna import MediaDLNA
 from .adb import MediaADB
+from .kodi import MediaKodi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,8 +54,9 @@ async def async_setup_entry(
     host = entry.data.get(CONF_HOST)
     name = entry.data.get(CONF_NAME)
     tv_url = entry.options.get('tv_url', '')
-    # 引入卡片
-    if entry.options.get('remote', True):
+    # 只执行一次
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
         hass.http.register_static_path('/xiaomi_tv-local', hass.config.path("custom_components/xiaomi_tv/www"), False)
         hass.components.frontend.add_extra_js_url(hass, '/xiaomi_tv-local/tv-remote.js?v=' + VERSION)
 
@@ -79,30 +81,12 @@ class XiaomiTV(MediaPlayerEntity):
         # DLNA媒体设备
         self.dlna = MediaDLNA(ip)
         self.adb = MediaADB(ip, self)
+        self.kodi = MediaKodi(ip, self)
         # 更新时间
         self.update_at = None
         # 已知应用列表
         self.app_list = []
-        self.apps = {
-                # '云视听极光': 'com.ktcp.video',
-                # '芒果TV': 'com.hunantv.license',
-                # '银河奇异果': 'com.gitvdemo.video',
-                # 'CIBN酷喵': 'com.cibn.tv',
-                # '视频头条': 'com.duokan.videodaily',
-                # '小米通话': 'com.xiaomi.mitv.tvvideocall',
-                # 'QQ音乐': 'com.tencent.qqmusictv',
-                # '定时提醒': 'com.mitv.alarmcenter',
-                # '天气': 'com.xiaomi.tweather',
-                # '用户手册': 'com.xiaomi.mitv.handbook',
-                # '桌面': 'com.mitv.tvhome',
-                # '电视管家': 'com.xiaomi.mitv.tvmanager',
-                # '日历': 'com.xiaomi.mitv.calendar',
-                # '小爱同学': 'com.xiaomi.voicecontrol',
-                # '相册': 'com.mitv.gallery',
-                # '电视设置': 'com.xiaomi.mitv.settings',
-                # '时尚画报': 'com.xiaomi.tv.gallery',
-                # '无线投屏': 'com.xiaomi.mitv.smartshare'
-            }
+        self.apps = {}
         # mitv ethernet Mac address
         self._attributes = {}
         # 失败计数器
@@ -241,11 +225,19 @@ class XiaomiTV(MediaPlayerEntity):
         # 调整音量
         await self.dlna.async_set_volume_level(volume)
 
-    async def async_play_media(self, media_type, media_id, **kwargs):            
-        await self.dlna.async_play_media(media_type, media_id)
+    async def async_play_media(self, media_type, media_id, **kwargs):
+        if self.kodi.state != STATE_UNAVAILABLE:
+            await self.kodi.async_play_media(media_type, media_id)
+        else:
+            await self.dlna.async_play_media(media_type, media_id)
 
     async def async_media_play(self):
-        result = await self.dlna.async_media_play()
+        
+        if self.kodi.state != STATE_UNAVAILABLE:
+            result = await self.kodi.async_media_play()
+        else:
+            result = await self.dlna.async_media_play()
+
         if result:
             self._state = STATE_PLAYING
         else:
@@ -304,6 +296,7 @@ class XiaomiTV(MediaPlayerEntity):
                 self.update_at = datetime.datetime.now()
                 await self.dlna.async_update()
                 await self.adb.async_update()
+                await self.kodi.async_update()
             # 获取截图
             res = await capturescreen(self.ip)
             if res is not None:

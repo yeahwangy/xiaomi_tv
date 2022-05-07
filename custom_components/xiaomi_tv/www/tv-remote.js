@@ -446,7 +446,6 @@ window.customElements.define('tv-remote-card', class extends HTMLElement {
         return 1;
     }
 });
-
 // 添加预览
 window.customCards = window.customCards || [];
 window.customCards.push({
